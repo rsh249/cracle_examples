@@ -47,28 +47,6 @@ nrow(plots)
 	plots = plots[which(plots$lon >= ext[1]),]
 	plots = plots[which(plots$lon <= ext[2]),]
 
-p_names=unique(plots$plot_name)
-t_names=unique(plots$scrubbed_species_binomial)
-
-
-
-if(!file.exists('./data.tab')){
-	extall = getextr(as.character(t_names), clim, schema='flat', factor=8,
-		maxrec=5000, rm.outlier=FALSE, 
-		parallel=TRUE, nclus = nclus, 
-		nmin = ob.nmin)
-	write.table(extall, file='data.tab');
-} else {
-	extall = read.table('data.tab');
-}
-head(extall)
-
-extall = na.omit(extall);
-ecount = plyr::count(extall$tax)
-extall2= extall[which(extall$tax %in% ecount[which(ecount$freq>=ob.nmin),1]),]
-
-extall = extall2;
-
 
 #function to quality check lat lon values
 decimalplaces = function(x) {
@@ -120,10 +98,10 @@ filter_spnum2 = function(name){
 
 
 filter_spnum2 = compiler::cmpfun(filter_spnum2);
-
+p_names=unique(plots2$plot_name)
 
 if(file.exists('p_works.txt')){ 
-		cat("File p_works.txt exists. OPENING EXISTING VERSION!]n");
+		cat("File p_works.txt exists. OPENING EXISTING VERSION!\n");
 		p_works = read.table('p_works.txt')[[1]];
 	} else {
 
@@ -139,8 +117,30 @@ if(file.exists('p_works.txt')){
 	stopCluster(cl);
 	p_works = unlist(p_works2);
 	write.table(p_works, file='p_works.txt')
-
 }
+
+
+#get final taxon list:
+t_names=unique(plots2$scrubbed_species_binomial)
+
+
+#Get GBIF data for all taxa
+if(!file.exists('./data.tab')){
+    extall = getextr(as.character(t_names), clim, schema='flat', factor=8,
+    maxrec=5000, rm.outlier=FALSE,
+    parallel=TRUE, nclus = nclus,
+    nmin = ob.nmin)
+    write.table(extall, file='data.tab');
+} else {
+    extall = read.table('data.tab');
+}
+head(extall)
+
+extall = na.omit(extall);
+ecount = plyr::count(extall$tax)
+extall2= extall[which(extall$tax %in% ecount[which(ecount$freq>=ob.nmin),1]),]
+
+extall = extall2;
 
 
 
