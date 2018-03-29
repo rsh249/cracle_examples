@@ -1,0 +1,25 @@
+[general]
+creator=R package 'raster'
+created=2018-03-28 13:19:55
+[georeference]
+nrows=1344
+ncols=2160
+xmin=-130
+ymin=10
+xmax=-40
+ymax=66
+projection=+proj=longlat +ellps=WGS84 +towgs84=0,0,0,0,0,0,0 +no_defs
+[data]
+datatype=FLT4S
+byteorder=little
+nbands=6
+bandorder=BIL
+minvalue=-155:1.2:-40.3:35:-2049.58689988817:0
+maxvalue=294:45.6:24.2:5829:4219.58016293829:12
+nodatavalue=-3.4e+38
+[legend]
+legendtype=
+values=
+color=
+[description]
+layername=MAT:maxtemp:mintemp:MAP:wbalann:WINTERLEN
