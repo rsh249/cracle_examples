@@ -32,6 +32,7 @@ if(file.exists('plots.tab')){
 alt.plots = extract(alt, plots[,c('longitude', 'latitude')])
 alt.plots = cbind(alt.plots, plots$elevation_m)
 altdiff = alt.plots[,1] - alt.plots[,2]
+alt.nom = cbind(plots$plot_name, altdiff) ##Can use to refilter results later in object 'collection' below
 plots = plots[-which(altdiff >= 200),] ##Filter out sites with greater than 200m elevation difference
 
 
@@ -122,6 +123,7 @@ if(file.exists('p_works.txt')){
 
 
 #get final taxon list:
+plots2 = plots2[which(plots2$plot_name %in% p_works),]
 t_names=unique(plots2$scrubbed_species_binomial)
 
 
@@ -185,6 +187,7 @@ predcoll = function(x){
 
 		print(x[[i]]);
 		print(sp);
+		if(length(sp)==0){return(NULL)};
         	site_ob = cbind('1111', as.character(x[[i]]), lat, lon)
         	site_ob = as.data.frame(site_ob)
        		 colnames(site_ob) = colnames(extall[,1:4])
@@ -286,10 +289,11 @@ for(i in 6:(6+(nlayers(clim)-1))){
 
   if(colnames(collection)[i] %in% adjustment){
 	#some temperature variables are stored and operated on as Celcius*10. We are reversing that here.
+	collection[,i]=collection[,i]/10;
+	collection[,i+nlayers(clim)] = collection[,i+nlayers(clim)]/10;
 
-    print(colnames(collection)[i])
-    var = var/10;
-    var.origkde = var.origkde/10
+	  var = collection[,i];
+        var.origkde = collection[,i+nlayers(clim)];
   }
 
   mea[i-5] = mean(var.origkde - var, na.rm=TRUE)
@@ -348,7 +352,9 @@ ggplot(data=anomaly.melt) +
 	geom_histogram(aes(x=Absolute_Anomaly, fill = ClimVar), bins =30) +
 	facet_wrap(~ClimVar, scales='free') +
 	theme(panel.background=element_rect(fill=NA), legend.title=element_blank())+
-	scale_fill_manual(values=brewer.pal('Dark2', n=6))
+	scale_fill_manual(values=brewer.pal('Dark2', n=6)) +
+	ylab('Number of CRACLE sites') +
+	xlab('Absolute anomaly between CRACLE and WorldClim');
 
 save.image('end.RData');
 
