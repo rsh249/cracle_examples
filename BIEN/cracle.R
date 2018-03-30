@@ -8,7 +8,7 @@ library(reshape2)
 library(data.table)
 ob.nmin = 5;
 t.nmin = 10;
-nclus = 16;
+nclus = 24;
 clim = stack('sampleclim.gri')
 alt = stack('altNA.gri')
 
@@ -32,7 +32,7 @@ if(file.exists('plots.tab')){
 alt.plots = extract(alt, plots[,c('longitude', 'latitude')])
 alt.plots = cbind(alt.plots, plots$elevation_m)
 altdiff = alt.plots[,1] - alt.plots[,2]
-plots = plots[-which(altdiff>500),]
+plots = plots[-which(altdiff >= 200),] ##Filter out sites with greater than 200m elevation difference
 
 
 head(plots)
@@ -47,6 +47,7 @@ nrow(plots)
 	plots = plots[which(plots$lon >= ext[1]),]
 	plots = plots[which(plots$lon <= ext[2]),]
 
+plots = plots[which(plots$lon <= -100),] #Limit to the West
 
 #function to quality check lat lon values
 decimalplaces = function(x) {
@@ -254,9 +255,10 @@ collection = collection[which(collection[,'length(denlist)'] >= t.nmin),]
 collection$lat = as.numeric(as.character(collection$lat));
 collection$lon = as.numeric(as.character(collection$lon));
 
+collection = collection[collection$lon <= -100,] ##Limit to the West ONLY
 
 
-collection = collection[which(collection$'length(denlist'>= t.nmin),]
+collection = collection[which(collection$'length(denlist)'>= t.nmin),]
 
 #plot diversity distribution among sites
 hist(collection$'length(denlist)')
@@ -333,10 +335,11 @@ plot(dp, ylim=c(0,3), xlab = 'N Species', ylab = 'MAT Median Anomaly (C)')
 raster::plot(clim[[1]], col = viridis::viridis(100))
 points(as.numeric(as.character(collection$lon)), as.numeric(as.character(collection$lat)), pch=20, cex=0.3)
 
-save.image('end.RData');
 
+coll = collection
+anomaly = cbind(coll[,1:5], abs(coll[,6:11] - coll[,12:17]), coll[,18])
 
-anomaly.melt = melt(collection, 
+anomaly.melt = melt(anomaly, 
 	measure.vars=c('MAT', 'maxtemp', 'mintemp', 'MAP', 'wbalann', 'WINTERLEN'),
 	variable.name = 'ClimVar',
 	value.name = 'Absolute_Anomaly')
@@ -347,6 +350,7 @@ ggplot(data=anomaly.melt) +
 	theme(panel.background=element_rect(fill=NA), legend.title=element_blank())+
 	scale_fill_manual(values=brewer.pal('Dark2', n=6))
 
+save.image('end.RData');
 
 
 
