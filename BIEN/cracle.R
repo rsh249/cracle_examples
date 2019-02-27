@@ -8,14 +8,16 @@ library(reshape2)
 library(data.table)
 ob.nmin = 5;
 t.nmin = 10;
-nclus = 24;
+nclus = 16;
+setwd('~/GitHub/cracle_examples/BIEN/')
 clim = stack('sampleclim.gri')
 alt = stack('altNA.gri')
 
 if(file.exists('plots.tab')){
 	         ext = extent(c(-130, -40, 10, 66));
 	#	 plots = read.table('plots.tab', nrows= 13348359); 
-		plots = fread('plots.tab', fill=TRUE);
+		plots = fread('plots.tab', quote=""); ## Causing a warning but OK
+	#	plots = read.csv('plots.tab', sep ='\t')
 	} else {
 	us.plots=BIEN_plot_country('United States', cultivated=FALSE, all.taxonomy = TRUE, native.status=TRUE, all.metadata=TRUE)
         can.plots=BIEN_plot_country('Canada', cultivated=FALSE, all.taxonomy = TRUE, native.status=TRUE, all.metadata=TRUE)
@@ -48,7 +50,7 @@ nrow(plots)
 	plots = plots[which(plots$lon >= ext[1]),]
 	plots = plots[which(plots$lon <= ext[2]),]
 
-plots = plots[which(plots$lon <= -100),] #Limit to the West
+#plots = plots[which(plots$lon <= -100),] #Limit to the West
 
 #function to quality check lat lon values
 decimalplaces = function(x) {
@@ -124,15 +126,24 @@ if(file.exists('p_works.txt')){
 
 #get final taxon list:
 plots2 = plots2[which(plots2$plot_name %in% p_works),]
+
+
 t_names=unique(plots2$scrubbed_species_binomial)
 
 
 #Get GBIF data for all taxa
 if(!file.exists('./data.tab')){
-    extall = getextr(as.character(t_names), clim, schema='flat', factor=8,
-    maxrec=5000, rm.outlier=FALSE,
-    parallel=TRUE, nclus = nclus,
-    nmin = ob.nmin)
+  extall = cRacle::getextr(
+    as.character(t_names),
+    clim,
+    schema = 'flat',
+    factor = 8,
+    maxrec = 5000,
+    rm.outlier = FALSE,
+    parallel = TRUE,
+    nclus = nclus,
+    nmin = ob.nmin
+  )
     write.table(extall, file='data.tab');
 } else {
     extall = read.table('data.tab');
@@ -207,7 +218,7 @@ predcoll = function(x){
 
 
 require(parallel);
-minclus = nclus/4;
+minclus = nclus;
 cl = makeCluster(minclus, type="FORK", outfile = '');
 #clusterExport(cl, c("plots2", "clim", "extall", "dens.refnames", "densall")); ##Must do if using SOCK cluster type (MPI probably too).
 p = proc.time();
@@ -361,7 +372,7 @@ save.image('end.RData');
 
 
 
-q('no');
+#q('no');
 
 
 
