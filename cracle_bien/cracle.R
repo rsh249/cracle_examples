@@ -3,18 +3,27 @@ library(raster)
 library(parallel)
 library(gbm)
 library(cRacle)
+library(ggplot2)
+library(vroom)
+library(BIEN)
 
 
 ob.nmin = 5;
 t.nmin = 5;
-nclus = 32;
-#setwd('~/GitHub/cracle_examples/BIEN/')
-#clim = stack('sampleclim.gri')
+nclus = 32; #CHECK YOUR HARDWARE>>>ADJUST nclus to be < the total number of CPU cores.
 
-##Add system call to wget to download file for worldclim 2.0
+############EDITS REQUIRED
+#if you need to get the worldclim data run lines 17:20 FIRST
+#getwc2 = 'wget http://biogeo.ucdavis.edu/data/worldclim/v2.0/tif/base/wc2.0_2.5m_bio.zip'
+#system(getwc2)
+#unz = 'unzip wc2.0_2.5m_bio.zip'
+#system(unz)
+#####################################
 
-clim = raster::stack(list.files('/usr/share/data/wc2.0/bio2.5', pattern='.tif', full.names = T))
-#alt = stack('altNA.gri')
+##EDIT PATH TO WORLDCLIM DATA BELOW:$$$$$$$$$$$$$$$$
+clim = stack(list.files('/usr/share/data/wc2.0/bio2.5', pattern="*.tif", full.names = T))
+#clim = stack(list.files('/usr/share/data/wc2.0/bio0.5', pattern="*.tif", full.names = T))
+######################
 
 if(file.exists('plots.tab')){
 	#	plots = data.table::fread('plots.tab', fill=TRUE); 
@@ -149,7 +158,7 @@ nrow(extall)
 cat("Begin PDF construction stage\n");
 densall <- dens_obj(extall[,-5],
         clim, manip = 'condi', kern ='optcosine',
-        n = 4096, clip = 'range',
+        n = 2048, clip = 'range',
         bg.n=1000, parallel=TRUE, nclus = nclus);
 
 
@@ -165,6 +174,7 @@ predcoll = function(x){
 	require(cRacle);
 	ret = list();
 	for(i in 1:length(x)){
+	  out = tryCatch({
 		lat = NULL
 		lon = NULL
 		s = NULL
@@ -195,6 +205,14 @@ predcoll = function(x){
         	actual = raster::extract(clim, cbind(as.numeric(as.character(lon)), as.numeric(as.character(lat))), cellnumbers=TRUE)
         	site_ex = cbind(site_ob, actual)
 		ret[[i]] = cbind(site_ex, t(opt.top), length(denlist));
+	},
+		error = function(cond) {
+		  # Choose a return value in case of error
+		  ret[[i]] = NA
+		}, warning = function(cond) {
+		  ret[[i]] = NA
+		})
+
 	}
 	return(ret);
 
@@ -204,12 +222,13 @@ predcoll = function(x){
 
 
 require(parallel);
-minclus = nclus/4;
-cl = makeCluster(minclus, type="SOCK", outfile = '');
-clusterExport(cl, c("plots2", "clim", "extall", "dens.refnames", "densall")); ##Must do if using SOCK cluster type (MPI probably too).
+minclus = 12
+#cl = makeCluster(minclus, type="SOCK", outfile = '');
+#clusterExport(cl, c("plots2", "clim", "extall", "dens.refnames", "densall")); ##Must do if using SOCK cluster type (MPI probably too).
+cl = makeCluster(minclus, type = "FORK")
 p = proc.time();
-#splits = clusterSplit(cl, p_works);
-coll2 = parLapply(cl, p_works, predcoll);
+splits = clusterSplit(cl, p_works);
+coll2 = parLapply(cl, splits, predcoll);
 proc.time() - p;
 stopCluster(cl);
 
@@ -440,39 +459,45 @@ gbm.pearson = list()
 gbm.spearman = list()
 gbm.coll = list()
 gbm.test = list()
+zbest.iter = list()
+
+colnames(train.col)[ncol(train.col)] = 'ntax'
+colnames(test.col)[ncol(train.col)] = 'ntax'
 
 for(var in 1:19) {
   library(gbm)
   
   x.r = names(clim[[var]])
   x.p = paste(x.r, 'origkde', sep='.')
-  x = as.formula(paste(x.r, " ~ ", x.p)); #model
+  x.n = 'ntax'
+  x = as.formula(paste(x.r, " ~ ", x.p, ' + ', x.n)); #model
   print(x)
   y = train.col; #data
   t = test.col
-  z = y[,c(x.r, x.p)]
+  z = y[,c(x.r, x.p, x.n)]
   gbm.test = gbm(
     x,
     data = z,
-    n.trees = 1000,
-    distribution = "gaussian",
-    shrinkage = 0.01,
-    interaction.depth = 5,
+    n.trees = 5000,
+    distribution = "laplace",
+    shrinkage = 0.1,
+    interaction.depth = 3,
     bag.fraction = 0.5,
     train.fraction = 0.5,
     n.minobsinnode = 10,
     keep.data = TRUE,
-    verbose = FALSE
+    cv.folds=5, n.cores=5,
+    verbose = TRUE
   )
-  gbm.pred = predict(gbm.test, t, n.trees=999)
-  plot(gbm.pred,
-       t[,x.r],
-       pch = 20, col = alpha('black', 0.4),
+  zbest.iter[[var]] = gbm.perf(gbm.test, plot.it=F, method='cv')
+  gbm.pred = predict(gbm.test, t, n.trees = zbest.iter[[var]][1], type = "link")  
+  plot(t[,x.r], gbm.pred,
+       pch = 20, col = alpha('black', 0.2),
        cex = 0.5)
   points(
-    t[,x.p],
     t[,x.r],
-    col = alpha('red', 0.1),
+    t[,x.p],
+    col = alpha('red', 0.2),
     cex = 0.5
   )
   abline(0,1)
@@ -510,6 +535,8 @@ summary.gbm = cbind(
 
 colnames(summary.gbm) = colnames(summary)
 
+write.csv(summary.gbm, 'summary.gbm')
+write.csv(summary, 'summary')
 coll.gbm = gbm.coll[[1]]
 for(z in 2:19){
   coll.gbm = cbind(coll.gbm, gbm.coll[[z]])
@@ -523,12 +550,12 @@ anoma.gbm = cbind(coll.gbm[,1:5],
                 (coll.gbm[,6:(nlayers(clim)+5)] - coll.gbm[,(nlayers(clim)+6):(2*nlayers(clim)+5)]), 
                 coll.gbm[,ncol(coll.gbm)])
 
-coll.test = gbm.test[[1]]
-for(z in 2:19){
-  coll.gbm = cbind(coll.test, gbm.test[[z]])
-}
-
-colnames(coll.test) = paste(names(clim), ".test", sep='')
+# coll.test = gbm.test[[1]]
+# for(z in 2:19){
+#   coll.test = cbind(coll.test, gbm.test[[z]])
+# }
+coll.test = test.col
+#colnames(coll.test) = paste(names(clim), ".test", sep='')
 
 coll.test = cbind(test.col[,1:24], coll.test, test.col[,ncol(test.col)])
 
@@ -538,11 +565,11 @@ anoma.test = cbind(test.col[,1:5],
 
 library(reshape2)
 anomaly.melt.gbm = melt(anoma.gbm, 
-                    measure.vars=names(clim)[c(1,5,6,12,15,19)],
+                    measure.vars=names(clim)[c(1,5,6,12,13,17)],
                     variable.name = 'ClimVar',
                     value.name = 'Absolute_Anomaly')
 anomaly.melt.test = melt(anoma.test, 
-                        measure.vars=names(clim)[c(1,5,6,12,15,19)],
+                        measure.vars=names(clim)[c(1,5,6,12,13,17)],
                         variable.name = 'ClimVar',
                         value.name = 'Absolute_Anomaly')
 anomaly.melt.test = cbind(anomaly.melt.test , rep('CRACLE', nrow(anomaly.melt.test )))
@@ -557,14 +584,56 @@ library(RColorBrewer)
 library(ggsci)
 err1 = ggplot(data=anomaly.merge) +
   geom_density(aes(x=Absolute_Anomaly, col = model)) +
-  facet_wrap(~ClimVar, scales='free') +  theme_linedraw() +
+  facet_wrap(~ClimVar, scales='free',ncol=1) +  theme_linedraw() +
   #theme(panel.background=element_rect(fill=NA), legend.title=element_blank())+
  # scale_fill_manual(values=brewer.pal('Dark2', n=6)) +
-  scale_color_npg() +
+  scale_color_npg() + theme(legend.position="bottom") +
   ylab('Number of CRACLE sites') +
-  xlab('Anomaly distributions between CRACLE and WorldClim')#+ ylim(c(0,5000));
+  xlab('Model Estimate - WorldClim')
 err1
-
 ggsave('cracle_anomalies_bien.png', plot=err1, width=7.25, height=3, units='in', dpi=600)
- 
-        	                                                                                                                                                         	                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+
+
+##scatterplots for top vars showing raw cracle and corrected estimates vs worldclim
+head(coll.gbm)
+head(collection)
+
+nl = nlayers(clim)
+
+coll.catch = data.frame(stringsAsFactors = FALSE)
+
+gbm.catch = data.frame(stringsAsFactors = FALSE)
+
+
+last = 1
+measure.vars = c(1,5,6,12,13,17)
+for(nn in measure.vars){
+  nam = names(clim[[nn]])
+  midp = cbind(test.col[,1:5], test.col[,nam], test.col[,paste(nam, 'origkde', sep ='.')], rep(nam, nrow(test.col)), rep('CRACLE', nrow(test.col)))
+  coll.catch= rbind(coll.catch, midp)
+  midp.g = cbind(coll.gbm[,1:5], coll.gbm[,nam], coll.gbm[,paste(nam, 'gbm', sep ='.')], rep(nam, nrow(coll.gbm)), rep('CRACLE+GBM', nrow(coll.gbm)))
+  gbm.catch= rbind(gbm.catch, midp.g)
+
+
+  
+}
+
+
+colnames(coll.catch) = c('ind_id', 'tax', 'lat', 'lon', 'cells', 'WorldClim', 'Estimate', 'Parameter', 'Model')
+colnames(gbm.catch) = c('ind_id', 'tax', 'lat', 'lon', 'cells', 'WorldClim', 'Estimate', 'Parameter', 'Model')
+
+p.cracle = ggplot(data=coll.catch) + 
+  geom_point(aes(x=WorldClim, y =Estimate, colour=factor(Parameter)), size =0.6, alpha=0.7) + 
+  facet_wrap(~Parameter, scales = 'free', ncol=1) +
+  scale_color_npg() +
+  theme_linedraw() + theme(legend.position='none')
+
+gbr.cracle = ggplot(data=gbm.catch) + 
+  geom_point(aes(x=WorldClim, y =Estimate, colour=factor(Parameter)), size =0.6, alpha=0.7) + 
+  facet_wrap(~Parameter, scales = 'free', ncol=1) +
+  scale_color_npg() +
+  theme_linedraw() + theme(legend.position='none')
+
+library(ggpubr)
+gsa = ggarrange(p.cracle, gbr.cracle, err1, ncol=3, nrow=1, labels="AUTO")
+ggsave(filename='Figure2.png', plot=gsa, device=NULL, width = 7.25, heigh=9.5, dpi=500)
