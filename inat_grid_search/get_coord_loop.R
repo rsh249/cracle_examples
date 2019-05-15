@@ -24,7 +24,7 @@ ext.larger = extent(ext[1] - 10, ext[2] + 10, ext[3] - 10, ext[4] + 10)
 ##EDIT PATH TO WORLDCLIM DATA BELOW:$$$$$$$$$$$$$$$$
 clim = stack(list.files('/usr/share/data/wc2.0/bio2.5', pattern="*.tif", full.names = T))
 #clim = stack(list.files('/usr/share/data/wc2.0/bio0.5', pattern="*.tif", full.names = T))
-
+######################
 clim = crop(clim[[1]], ext.larger)
 lat = ext[4]
 lon = ext[1]
@@ -377,11 +377,6 @@ p3 = ggplot(data = box_plot, aes(x=abs((box_plot$values)))) +
   theme(axis.text.x  = element_text(angle=45, vjust = .65))
 p3
 
-library(gridExtra)
-ga = grid.arrange(mapp, p1,p2)
-ga
-
-library(ggpubr)
 
 gsa = ggarrange(mapp, p1, p2, ncol=1, nrow=3, labels="AUTO")
-ggsave(filename='save.plots.png', plot=gsa, device=NULL, width = 4.25, heigh=9.5, dpi=500)
+ggsave(filename='Figure1.png', plot=gsa, device=NULL, width = 4.25, height=9.5, dpi=500)
