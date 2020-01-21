@@ -565,11 +565,11 @@ anoma.test = cbind(test.col[,1:5],
 
 library(reshape2)
 anomaly.melt.gbm = melt(anoma.gbm, 
-                    measure.vars=names(clim)[c(1,5,6,12,13,17)],
+                    measure.vars=names(clim)[c(1,5,6,12,17,18)],
                     variable.name = 'ClimVar',
                     value.name = 'Absolute_Anomaly')
 anomaly.melt.test = melt(anoma.test, 
-                        measure.vars=names(clim)[c(1,5,6,12,13,17)],
+                        measure.vars=names(clim)[c(1,5,6,12,17,18)],
                         variable.name = 'ClimVar',
                         value.name = 'Absolute_Anomaly')
 anomaly.melt.test = cbind(anomaly.melt.test , rep('CRACLE', nrow(anomaly.melt.test )))
@@ -587,8 +587,8 @@ err1 = ggplot(data=anomaly.merge) +
   facet_wrap(~ClimVar, scales='free',ncol=1) +  theme_linedraw() +
   #theme(panel.background=element_rect(fill=NA), legend.title=element_blank())+
  # scale_fill_manual(values=brewer.pal('Dark2', n=6)) +
-  scale_color_npg() + theme(legend.position="bottom") +
-  ylab('Number of CRACLE sites') +
+  scale_color_npg() + theme(legend.position="bottom", legend.direction="vertical") +
+  ylab('Proportion of CRACLE results') +
   xlab('Model Estimate - WorldClim')
 err1
 ggsave('cracle_anomalies_bien.png', plot=err1, width=7.25, height=3, units='in', dpi=600)
@@ -606,7 +606,7 @@ gbm.catch = data.frame(stringsAsFactors = FALSE)
 
 
 last = 1
-measure.vars = c(1,5,6,12,13,17)
+measure.vars = c(1,5,6,12,17,18)
 for(nn in measure.vars){
   nam = names(clim[[nn]])
   midp = cbind(test.col[,1:5], test.col[,nam], test.col[,paste(nam, 'origkde', sep ='.')], rep(nam, nrow(test.col)), rep('CRACLE', nrow(test.col)))
@@ -626,14 +626,46 @@ p.cracle = ggplot(data=coll.catch) +
   geom_point(aes(x=WorldClim, y =Estimate, colour=factor(Parameter)), size =0.6, alpha=0.7) + 
   facet_wrap(~Parameter, scales = 'free', ncol=1) +
   scale_color_npg() +
-  theme_linedraw() + theme(legend.position='none')
+  theme_linedraw() + ylab('CRACLE Estimate') + 
+  geom_abline(intercept = 0, slope = 1) +
+  theme(legend.position='none') + theme(axis.text.x  = element_text(angle=45, vjust = .65))
 
 gbr.cracle = ggplot(data=gbm.catch) + 
   geom_point(aes(x=WorldClim, y =Estimate, colour=factor(Parameter)), size =0.6, alpha=0.7) + 
   facet_wrap(~Parameter, scales = 'free', ncol=1) +
-  scale_color_npg() +
-  theme_linedraw() + theme(legend.position='none')
+  scale_color_npg() + ylab('CRACLE+GBR Estimate') + 
+  geom_abline(intercept = 0, slope = 1) +
+  theme_linedraw() + theme(legend.position='none') + theme(axis.text.x  = element_text(angle=45, vjust = .65))
 
-library(ggpubr)
-gsa = ggarrange(p.cracle, gbr.cracle, err1, ncol=3, nrow=1, labels="AUTO")
-ggsave(filename='Figure2.png', plot=gsa, device=NULL, width = 7.25, heigh=9.5, dpi=500)
+
+library(ggsci)
+test_spdf <- as(clim[[1]], "SpatialPixelsDataFrame")
+test_df <- as.data.frame(test_spdf)
+colnames(test_df) <- c("Degrees", "x", "y")
+mapp = ggplot(data=test_df) +  
+  geom_tile(aes(x=x, y=y, fill=Degrees)) + 
+  coord_equal() + theme_bw() + scale_fill_gsea() +
+  labs(x="Longitude", y="Latitude", title='BIEN Vegetation Plots') +
+  geom_point(data=collection, aes(x=lon, y=lat), alpha=1, pch = 20, size=0.4) 
+
+mapp 
+
+
+#library(ggpubr)
+#sa = ggarrange(p.cracle, gbr.cracle, err1, ncol=3, nrow=1, labels="AUTO")
+
+
+library("gridExtra")
+library("cowplot")
+# Arrange plots using arrangeGrob
+# returns a gtable (gt)
+gt <- arrangeGrob(mapp, p.cracle, gbr.cracle, err1,
+                  ncol = 3, nrow = 2, heights=c(1,3),
+                  layout_matrix = rbind(c(1,1,1), c(2,3,4)))
+
+p <- ggpubr::as_ggplot(gt) +                                # transform to a ggplot
+  draw_plot_label(label = c("A", "B", "C", "D"), size = 15,
+                  x = c(0, 0, 0.36, 0.69), y = c(1, 0.75, 0.75, 0.75)) 
+
+ggsave(filename='Figure2.png', plot=p, device=NULL, width = 7.25, heigh=9.5, dpi=500)
+
